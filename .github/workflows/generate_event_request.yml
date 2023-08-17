@@ -1,0 +1,43 @@
+name: Generate Event Pull Request
+on:
+  issue_comment:
+    types: [created]
+jobs:
+  Gen-Event-PR:
+    runs-on: ubuntu-latest
+    if: github.event.issue.pull_request == '' && contains(github.event.comment.body, '/gen_pr') && contains(github.event.issue.labels.*.name, '일정 요청(자동)')
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v3
+      - name: Install Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+      - name: Parse event data from PR body
+        uses: peter-murray/issue-body-parser-action@v2
+        id: event_parser
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          issue_id: ${{ github.event.issue.number }}
+          payload_marker: event_data
+      - name: Add Event
+        run: python db_cli.py push ${{ fromJSON(steps.event_parser.outputs.payload).year }} ${{ fromJSON(steps.event_parser.outputs.payload).month }} ${{ fromJSON(steps.event_parser.outputs.payload).day }} '${{ toJSON(fromJSON(steps.event_parser.outputs.payload).event) }}'
+      - name: Create Pull Request
+        id: pr
+        uses: peter-evans/create-pull-request@v5
+        with:
+          committer: ${{ fromJSON(steps.event_parser.outputs.payload).committer }} <${{ fromJSON(steps.event_parser.outputs.payload).email }}>
+          commit-message: ${{ github.event.issue.title }}
+          title: ${{ github.event.issue.title }}
+          body: ${{ github.event.issue.body }}
+          labels: 일정 요청(자동)
+          branch: event-request
+          branch-suffix: random
+          author: ${{ fromJSON(steps.event_parser.outputs.payload).committer }} <${{ fromJSON(steps.event_parser.outputs.payload).email }}>
+          delete-branch: true
+      - name: "Add Comment"
+        uses: peter-evans/create-or-update-comment@v3
+        with:
+          issue-number: ${{ github.event.issue.number }}
+          body: |
+            PR: #${{ steps.pr.outputs.pull-request-number }}

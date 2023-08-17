@@ -1,0 +1,64 @@
+name: Create Event Issue
+on:
+  workflow_dispatch:
+    inputs:
+      committer:
+        type: string
+        required: true
+      email:
+        type: string
+        required: true
+
+      year:
+        type: number
+        required: true
+      month:
+        type: number
+        required: true
+      day:
+        type: number
+        required: true
+        
+      event:
+        type: string
+        required: true
+jobs:
+  Create-Event-Issue:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v3
+      - name: Install Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+      - name: Convert tag id to string
+        id: tag
+        run: |
+          out=$(python db_cli.py solve_tag_id ${{ fromJSON(github.event.inputs.event).tag }})
+          out="${out//'%'/'%25'}"
+          out="${out//$'\n'/'%0A'}"
+          out="${out//$'\r'/'%0D'}" 
+          echo "tag=$out" >> $GITHUB_OUTPUT
+      - name: Convert group ids to string
+        id: groups
+        run: |
+          out=$(python db_cli.py solve_group_id '${{ toJSON(fromJSON(github.event.inputs.event).target) }}')
+          out="${out//'%'/'%25'}"
+          out="${out//$'\n'/'%0A'}"
+          out="${out//$'\r'/'%0D'}" 
+          echo "groups=$out" >> $GITHUB_OUTPUT
+      - name: Create an issue
+        uses: JasonEtco/create-an-issue@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+          COMMITTER: ${{ github.event.inputs.committer }}
+          EVENT_NAME: ${{ fromJSON(github.event.inputs.event).name }}
+          DESC: ${{ fromJSON(github.event.inputs.event).desc }}
+          TAG: ${{ steps.tag.outputs.tag }}
+          TARGET: ${{ steps.groups.outputs.groups }}
+          YEAR: ${{ github.event.inputs.year }}
+          MONTH: ${{ github.event.inputs.month }}
+          DAY: ${{ github.event.inputs.day }}
+          EVENT: '{"committer":"${{ github.event.inputs.committer }}","email":"${{ github.event.inputs.email }}","year":${{ github.event.inputs.year }},"month":${{ github.event.inputs.month }},"day":${{ github.event.inputs.day }},"event":${{ github.event.inputs.event }}}'

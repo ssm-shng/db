@@ -1,0 +1,38 @@
+name: Regenerate Event PR Commit
+env:
+    GH_TOKEN: ${{ github.token }}
+on:
+  issue_comment:
+    types: [created]
+jobs:
+  Regen-Commit:
+    runs-on: ubuntu-latest
+    if: github.event.issue.pull_request != '' && contains(github.event.comment.body, '/regen') && contains(github.event.issue.labels.*.name, '일정 요청(자동)')
+    steps:
+      - name: Check out main
+        uses: actions/checkout@v3
+        with:
+          ref: main
+      - name: Install Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+      - name: Parse event data from PR body
+        uses: peter-murray/issue-body-parser-action@v2
+        id: event_parser
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          issue_id: ${{ github.event.issue.number }}
+          payload_marker: event_data
+      - name: Add requested event
+        if : steps.event_parser.outputs.payload != 'NOT_FOUND'
+        run: python db_cli.py push ${{ fromJSON(steps.event_parser.outputs.payload).year }} ${{ fromJSON(steps.event_parser.outputs.payload).month }} ${{ fromJSON(steps.event_parser.outputs.payload).day }} '${{ fromJSON(steps.event_parser.outputs.payload).event }}'
+      - name: Commit changes
+        uses: EndBug/add-and-commit@v9
+        with:
+          author_name: ${{ fromJSON(steps.event_parser.outputs.payload).committer }}
+          author_email: ${{ fromJSON(steps.event_parser.outputs.payload).email }}
+          committer_name: ${{ fromJSON(steps.event_parser.outputs.payload).committer }}
+          committer_email: ${{ fromJSON(steps.event_parser.outputs.payload).email }}
+          message: "[일정 추가] ${{ fromJSON(fromJSON(steps.event_parser.outputs.payload).event).name }}"
+          push: --force
